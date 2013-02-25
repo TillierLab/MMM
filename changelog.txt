@@ -4,6 +4,8 @@ todo:
 	after testing remove the artificial limit on distances
 	add -nocache option [didn't work, because cache mechanics is embedded
 	in the very core of the methods]
+2013-02-25
+	Switched to git version control system
 2013-02-08
 	MatrixMatchMaker.cpp:
 		Made -z option (do not skip zero scores) valid for MMMLmode. The format is not pretty,
