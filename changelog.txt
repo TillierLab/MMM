@@ -1,0 +1,93 @@
+todo:
+	put command-line options in a struct for easier management
+	parse options in a separate function
+	after testing remove the artificial limit on distances
+	add -nocache option [didn't work, because cache mechanics is embedded
+	in the very core of the methods]
+2013-02-08
+	MatrixMatchMaker.cpp:
+		Made -z option (do not skip zero scores) valid for MMMLmode. The format is not pretty,
+		but the only requirement was to output the clade sets IDs for
+		the input matrices, which it does.
+2013-01-15
+	ProteinGroup.hpp
+		Added throw_error function to allow for inclusion of filename
+		into the error reports
+
+2012-12-03
+	MatrixMatchMaker.cpp:
+		disabled abnormal exit if slice of pmbq cannot be created -
+		often the filename can exceed the filesystem limit, but that's
+		not a sufficient reason to terminate the run altogether
+2012-11-23
+	MatrixMatchMaker.cpp:
+		corrected syntax for printslices and printpmbq options.
+2012-11-05
+	Alignment.cpp
+		Be more flexible with alignment format:
+			convert lower-case to upper-case
+			if not a valid amino acid or a gap then treat as X (unknown = gap)
+			Note: these changes will are permanent, i.e. will be appied if the aligment is printed at any point. 
+2012-10-25
+	MatrixMatchMaker.cpp:
+		Added command-line options to 
+		a) filter out sequences with high gap proportion
+		b) print generated slices and matrices (mainly for debugging)
+2012-10-22
+	MatrixMatchMaker.cpp:
+		Added the -aln2pmb command line option to enable recent additions.
+		Wrote usage info for -aln2pmb  
+2012-10-19
+	MatrixMatchMaker.cpp:
+	Alignment.cpp
+		For slices implemented multiple comma-separated ranges as well as inverse ranges.
+2012-10-18
+	Created ProteinGroup parent class for Alignment and DistanceMatrix classes.
+		Tried to make find_in_cache as inherited, but vector<child> cannot be casted as vector<parent>
+2012-10-11
+	DistanceMatrix.cpp, Alignment.cpp:
+		Rewrote abnormal exits as exceptions, so that the program can continue a batch if one file was bad.
+	MatrixMatchMaker.cpp:
+		Added caching of alignments (10)
+		Parses names in batch file as:	alignment_filename|region_name:region_start-region_end
+2012-10-08
+	MatrixMatchMaker.cpp
+		Added a caching scheme for distance matrices (longest unused goes out first).
+		Implemented the conversion of .aln files to .pmb (quck method)
+	DistanceMatrix.cpp:
+		Reduced precision when returning distances as 1D vector (to mimic the distances obtained from protdist output)
+2012-05-05
+	Rewrote the Makefile
+2012-05-17 (reqTax is still not completely fixed)
+	MatrixMatchMaker.cpp: fixed matrix rearrangement strategy. 
+2012-05-10 Per Robert's suggestion:
+	mmm_algorithm.cpp:
+		Moved the check for required taxon to the outermost loop (so that only the first matrix is ever considered)
+	MatrixMatchMaker.cpp:
+		Removed the required taxon rearrangement for the second matrix (became unnecessary after the above)
+2012-04-05
+	MatrixMatchMaker.cpp:
+		Since a downstream optimization in mmm_algorithm.cpp would skip over the taxons thought to be covered by the initial iteration,
+		the taxons need to be rearranged to put the requied taxon at the top of the list. Done via the "rearrangeMatrix" function.
+		Separated "processTaxonLabels" functions into 2 calls to a simpler version.
+2012-03-29
+	mmm_algorithm.cpp:
+		Made a fix for the -req option, by adding a check for the required taxon in the outer loop via the "satisfiesReqTax" function. Not tested much yet.
+	MatrixMatchMaker.cpp:
+		Added a check for -req option to be only permitted in conjunction with -u
+2012-03-28
+	MatrixMatchMaker.cpp:
+		Added a warning that -req option is broken. As of 2010-11-05, Alex was planning to put it back in, but it seems like he never got to it.
+2012-01-10
+	mmm_algorithm.h:
+		Increased sizes for static vectors and added warning messages when they are exceeded.
+2012-01-12
+	mmm_algorithm.h:
+		Added automatic size doubling for the vectors in question.
+		Fixed? the bug where the -maxtrees parameter would get ignored.
+2012-01-15
+	Makefile:
+		Changed the format. Added mmmWithL_debug executable (the one compiled with -D DEBUG directive)
+	mmm_algorithm.h:
+		Added DEBUG preprocessing directive to control the output of the notifications accompaning the vector resizing from the previous fix.  
+	
