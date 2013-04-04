@@ -7,6 +7,8 @@
 #include <list>
 #include <cmath>
 #include <queue>
+#include <omp.h>
+
 using namespace std;
 
 typedef pair<int,int> ProteinPair;

@@ -12,10 +12,12 @@ vpath %.h include
 OBJS = classCmdLineArgParser.o ProteinGroup.o Alignment.o DistanceMatrix.o mmm_algorithm.o MMML.o treeManip.o sighand.o hw_iface.o timer.o ports/tmports.o
 
 all: MatrixMatchMaker.cpp $(OBJS) 
+	$(CC) $(FLAGS) $(OBJS) $< -o $(NAME)_omp $(LDLIBS) -D OPEN_MP -fopenmp
 	$(CC) $(FLAGS) $(OBJS) $< -o $(NAME)_debug $(LDLIBS) -D DEBUG
 	$(CC) $(FLAGS) $(OBJS) $< -o $(NAME) $(LDLIBS)
+
 mmm_algorithm.o: mmm_algorithm.cpp mmm_algorithm.h bonus.h
-	$(CC) $(FLAGS) -c -o $@ $<
+	$(CC) $(FLAGS) -c -o $@ $< -D OPEN_MP -fopenmp
 
 ProteinGroup.o: ProteinGroup.cpp ProteinGroup.hpp
 	$(CC) $(FLAGS) -c -o $@ $<

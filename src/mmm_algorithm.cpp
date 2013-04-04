@@ -707,35 +707,47 @@ int CHardAlgorithm::launchAnalysis
 	s_total_sq_verts = 0;
 	#endif
 
-	// Outer loop - iterate over all protein pairs (vertices)
-	for (int i_a = wkRangeStart; i_a < wkRangeEnd ; ++i_a)
-	{	if (!satisfiesReqTax(i_a)) //abezgino: only need to test one protein, since reqTax is meaningless when taxon matching is not enforced
-			break; // *** if matrix 1 has all of its reqTaxName at the top, then there's nothing left to do
-		for (int i_b = 0 ; i_b < _num2; ++i_b)
-		{
-			if (!validProteinPair(i_a, i_b))
-				continue;
+	//omp_set_num_threads(2);
+	#pragma omp parallel default (none)
+	{
+		// Outer loop - iterate over all protein pairs (vertices)
+		#pragma omp for
+		for (int i_a = wkRangeStart; i_a < wkRangeEnd ; ++i_a)
+		{	if (!satisfiesReqTax(i_a)) //abezgino: only need to test one protein, since reqTax is meaningless when taxon matching is not enforced
+				break; // *** if matrix 1 has all of its reqTaxName at the top, then there's nothing left to do
 			
-			// Build the numberline for protein pair i
-			buildNumberLine(i_a, i_b);
-
-			// Build a problem set
-			buildProblemSet(i_a, i_b);
-
-			if (_setProbs.empty())
-				continue;
-
-			_useHW? maxCliquesHard() : maxCliquesEmu();
-
-			#ifdef DUMP_TESTBENCH
-			dumpSet(tbfile);
-			n_sets++;
+			#ifdef MY_OPEN_MP
+			printf("Thread:%d\n", omp_get_thread_num());
 			#endif
-
-			copyCliques(i_a, i_b);
-		} // i_b
-	} // i_a
-
+			#ifndef MY_BLAH
+			printf("No Thread\n");
+			#endif
+			for (int i_b = 0 ; i_b < _num2; ++i_b)
+			{
+				if (!validProteinPair(i_a, i_b))
+					continue;
+				
+				// Build the numberline for protein pair i
+				buildNumberLine(i_a, i_b);
+	
+				// Build a problem set
+				buildProblemSet(i_a, i_b);
+	
+				if (_setProbs.empty())
+					continue;
+	
+				_useHW? maxCliquesHard() : maxCliquesEmu();
+	
+				#ifdef DUMP_TESTBENCH
+				dumpSet(tbfile);
+				n_sets++;
+				#endif
+	
+				copyCliques(i_a, i_b);
+			} // i_b
+		} // i_a
+	
+	}
 	#ifdef DUMP_TESTBENCH
 	tbfile.close();
 	cout << "Dumped " << n_sets << " sets\n";
