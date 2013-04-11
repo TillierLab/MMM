@@ -2,7 +2,7 @@ NAME = mmmWithL
 CC = g++
 FLAGS = -O2 $(INCLUDE)
 INCLUDE = -I include -I shiny -I ports
-LDLIBS = -lm
+LDLIBS = -lm -lz -lboost_iostreams
 
 #vpath %.o bin
 vpath %.cpp src

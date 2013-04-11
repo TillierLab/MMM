@@ -75,14 +75,14 @@ public:
 	//void processSubmatrices(std::ifstream& infile, std::string& theLine);
 	//void processSubmatricesWithOutput(std::ifstream& infile, std::ofstream& outfile, std::string& theLine);
 	void processSubmatricesFromMMM(const std::set<std::string>& theSet1, const std::set<std::string>& theSet2,
-		int subtreeIdx, std::ofstream* outfile);
-	void produceSummaryOutput(std::ofstream& outfile);	
+		int subtreeIdx, std::ostream* outfile);
+	void produceSummaryOutput(std::ostream& outfile);	
 	//std::pair<std::set<std::string>, std::set<std::string> > getNextSubtreeFromFile(std::ifstream& infile,
 	//	bool* done, std::string& theLine);
 };
 
-void writeTree(std::ofstream& outfile, const TreeType& refSets, const std::string& treeFileName);
-void writeHeader(std::ofstream& outfile, bool topCoverage, bool listTaxa);
+void writeTree(std::ostream& outfile, const TreeType& refSets, const std::string& treeFileName);
+void writeHeader(std::ostream& outfile, bool topCoverage, bool listTaxa);
 std::string cladeRestriction(const std::map<std::string, std::set<std::string> >& refClades, const std::set<std::string>& taxa, bool listMembers);
 std::set<std::string> identifyTaxaToIgnore(const std::string& ignoreTaxaFileName);
 std::pair<TreeType, std::map<std::string, std::set<std::string> > >

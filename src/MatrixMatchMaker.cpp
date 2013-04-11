@@ -19,6 +19,12 @@
 #include <cstdlib>
 #include <ctime>
 
+#include <boost/iostreams/device/file_descriptor.hpp>
+//#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+//#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+
 #include "mmm_algorithm.h"
 #include "timer.h"
 #include "sighand.h"
@@ -31,7 +37,7 @@
 #define DISTANCE_MATRIX_CACHE_SIZE 1000
 
 using namespace std;
-
+using namespace boost::iostreams;
 
 struct CmpTreesByWeight
 {
@@ -59,7 +65,7 @@ static void showStats(vector<int>& taxIndices1, vector<int>& taxIndices2, vector
 static int calcTaxonCombinations(vector<int>& taxIndices1, vector<int>& taxIndices2);
 static string makeStateSaveFileName(const string& first, const string& second);
 static void processDistances(vector<double>& distances, double cutoffLower, double cutoffUpper, bool logDistances);
-static void handleErrors(bool ignoreErrors, ofstream& outfile);
+static void handleErrors(bool ignoreErrors, filtering_stream<output>& outfile);
 static void rearrangeMatrix(vector<string>& names, vector<string>& taxLabels, vector<double>& distances, const string reqTaxName);
 
 
@@ -116,6 +122,10 @@ int main(int argc, const char* argv[])
 	bool printPmb = false;
 	bool printSlice = false;
 	double gapThreshold = -1; //by default gap threshold for alignments is disabled
+	
+	bool gzipIn = false;
+	bool gzipOut = false;
+	
 	{
 		CmdLineArgParser options(argc, argv);
 		doShowStats = options.parse("-stats");
@@ -224,6 +234,9 @@ int main(int argc, const char* argv[])
 			printSlice = options.parse("-printslice");
 		}
 		
+		gzipIn = options.parse("-gzipin"); 
+		gzipOut = options.parse("-gzipout"); 
+		
 		if (!options.empty())
 		{	cout << "Unrecognized option:" << endl;
 			options.print();
@@ -236,17 +249,20 @@ int main(int argc, const char* argv[])
 	//populate the list of pairs of distance matrices to run
 	vector<pair<string, string> > theDistFileNames;
 	if (batchFileName.empty())
-	{
-		theDistFileNames.push_back(pair<string, string>(distfileName1, distfileName2));
+	{	theDistFileNames.push_back(pair<string, string>(distfileName1, distfileName2));
 	} 
 	else
-	{
-		ifstream batchFile(batchFileName.c_str());
-		if (!batchFile.is_open())
-		{
-			cout << "\nError: cannot open file " << batchFileName << endl;
+	{	filtering_stream<input> batchFile;
+		if (gzipIn)
+		{	batchFile.push(gzip_decompressor());
+		}
+		try
+		{	batchFile.push(file_descriptor_source(batchFileName));
+		} catch (exception& e)
+		{	cout << "\nError: cannot open file " << batchFileName << "\nReason:" << e.what() << endl;
 			exit(1);
 		}
+		
 		string thePair;
 		string::size_type p;
 		getline(batchFile, thePair, '\n');
@@ -256,7 +272,9 @@ int main(int argc, const char* argv[])
 			theDistFileNames.push_back(pair<string, string>(thePair.substr(0, p), thePair.substr(p + 1)));
 			getline(batchFile, thePair, '\n');
 		}
-		batchFile.close();
+
+		batchFile.strict_sync();
+		batchFile.reset();
 	}
 
 	// MMML extensions: New 2010.02.28: RLC:
@@ -269,16 +287,32 @@ int main(int argc, const char* argv[])
 	// These are empty if we're not in MMML mode...
 	// MMML extensions: New 2010.02.28: RLC.
 
-	ofstream outfile, tablefile; // New 2010.01.23: RLC edit
-	if (MMMLmode || (brief && outputZeros) || !noHeader) // New 2010.02.28: RLC, added MMMLmode file opening
-	{	outfile.open(outfileName.c_str());
+	ofstream tablefile; // New 2010.01.23: RLC edit
+	filtering_stream<output> outfile;
+
+	//outfileRaw.open(outfileName.c_str());
+	if (gzipOut)
+	{	//outfileRaw.open(outfileName.c_str(), ios_base::out | ios_base::binary);
+		outfile.push(gzip_compressor());
 	}
+	try
+	{	outfile.push(file_descriptor_sink(outfileName.c_str()));
+	} catch (exception& e)
+	{	cout << "\nError: cannot open file " << outfileName << "\nReason:" << e.what() << endl;
+		exit(1);
+	}
+
+
+
 	
 	// MMML extensions: New 2010.02.28: RLC:
 	if (MMMLmode)
 	{	if (LverboseMode) writeTree(outfile, refSets, treeFileName);
 	}
 	// MMML extensions: New 2010.02.28: RLC.
+	
+
+	
 	
 	//abezgino 2011.01.21 : print header when in batch mode
 	if (!noHeader)
@@ -292,7 +326,8 @@ int main(int argc, const char* argv[])
 		}
 			
 		if (onlyHeader)
-		{	outfile.close();
+		{	outfile.strict_sync();
+			outfile.reset();
 			exit (0);
 		}
 	}
@@ -313,31 +348,9 @@ int main(int argc, const char* argv[])
 	vector<pair<string, string> >::const_iterator batchIt, batchItEnd = theDistFileNames.end();
 	for (batchIt = theDistFileNames.begin(); batchIt != batchItEnd; ++batchIt)
 	{
-		// Open output file
-		if (!outfile.is_open())
-		{
-			if (rangeStart >= 0)
-			{
-				string::size_type lastDot = outfileName.find_last_of('.');
-				if (lastDot == string::npos)
-				{
-					outfile.open((outfileName + '_' + itoa(rangeStart) + '-' + itoa(rangeEnd)).c_str());
-				}
-				else
-				{
-					outfile.open((outfileName.substr(0, lastDot) + '_' + itoa(rangeStart) + '-' + itoa(rangeEnd) +
-						outfileName.substr(lastDot)).c_str());
-				}
-			}
-			else
-			{
-				outfile.open(outfileName.c_str());
-			}
-		}
-
 		// Print matrix file names to stdout
 		cout << batchIt->first << '\t' << batchIt->second; 
-
+	
 		// Brief format output: start each row with the two matrix file names
 		if(brief && outputZeros) 
 		{	
@@ -643,7 +656,8 @@ int main(int argc, const char* argv[])
 	}
 
 	tablefile.close(); // New 2010.01.23: RLC bug fix
-	outfile.close();
+	outfile.strict_sync();
+	outfile.reset();
 	
 	return 0;
 }
@@ -1002,16 +1016,17 @@ static void processDistances(vector<double>& distances, double cutoffLower, doub
 //
 
 
-static void handleErrors(bool ignoreErrors, ofstream& outfile)
+static void handleErrors(bool ignoreErrors, filtering_stream<output>& outfile)
 {	if (ignoreErrors)
 	{	cerr << "\tIgnored ..." << endl;
 	}
 	else
 	{	cerr << endl;
 		cout << endl;
-		if (outfile.is_open())
+		if (outfile.good())
 		{	outfile << endl;
-			outfile.close();
+			outfile.strict_sync();
+			outfile.reset();
 		}
 		exit(1);
 	}

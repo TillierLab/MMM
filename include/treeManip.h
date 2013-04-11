@@ -62,7 +62,7 @@ std::string writeTree(const std::string& origTree, const std::string& s, TreeTyp
 std::string writeTreeRecursor(const std::string& origTree, const std::string& s, TreeType& theTree);
 std::string elaborateSetName(const std::string& s, TreeType& theTree);
 std::set<std::string> elaborateSet(const std::string& s, TreeType& theTree);
-void printSets(const TreeType& theSets, std::ofstream& outFile);
+void printSets(const TreeType& theSets, std::ostream& outFile);
 void printVerticalSets(const TreeType& theSets, std::map<std::string, int>& theSummary,
 	std::ofstream& outFile, bool verboseMode);
 void findVerticalSetsInString(const std::string& theString, std::set<std::string>& theSets);

@@ -4,6 +4,18 @@ todo:
 	after testing remove the artificial limit on distances
 	add -nocache option [didn't work, because cache mechanics is embedded
 	in the very core of the methods]
+2013-04-11
+	Added gzip input and output
+	Force opening of output file in all cases, because it was interferring
+	with gzip options (and it's never a good idea to skip making a file
+	when one is expected).
+	Removed range start/end options, also because of gzip (and it was
+	never being used anyway, especially not with new MMM version, should
+	try OpenMP+MPI if really need parallel processing)
+	Fixed the bug where coninued as normal when output file could not be
+	created.
+	Problems: completes without an error if the input format is invalid (i.e. txt instead of gzip)
+
 2013-02-25
 	Switched to git version control system
 2013-02-08

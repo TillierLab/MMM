@@ -105,7 +105,7 @@ void MMMdata::generateOutputText(void)
 }
 
 void MMMdata::processSubmatricesFromMMM(const std::set<std::string>& theSet1, const std::set<std::string>& theSet2,
-	int subtreeIdx, std::ofstream* outfile)
+	int subtreeIdx, std::ostream* outfile)
 {
 	std::set<std::string> theSet, theSetZeroExt;
 	std::set<std::string>::const_iterator sIt, sItEnd = theSet1.end();
@@ -144,7 +144,7 @@ void MMMdata::processSubmatricesFromMMM(const std::set<std::string>& theSet1, co
 	}
 }
 
-void MMMdata::produceSummaryOutput(std::ofstream& outfile)
+void MMMdata::produceSummaryOutput(std::ostream& outfile)
 {
 	if (top0CoverageSubmatrixIdx_ > 0) {
 		outfile << top0CoverageSubmatrixIdx_ << '\t' << numTrees_ <<  '\t' << matrixInfoLines_ << '\t';
@@ -161,7 +161,7 @@ void MMMdata::produceSummaryOutput(std::ofstream& outfile)
 }
 
 
-void writeTree(std::ofstream& outfile, const TreeType& refSets, const std::string& treeFileName)
+void writeTree(std::ostream& outfile, const TreeType& refSets, const std::string& treeFileName)
 {
 	std::cout << "\nThe reference tree " << treeFileName << std::endl;
 	outfile << "The reference tree " << treeFileName << std::endl;
@@ -169,7 +169,7 @@ void writeTree(std::ofstream& outfile, const TreeType& refSets, const std::strin
 	outfile << "\n\n";
 }
 
-void writeHeader(std::ofstream& outfile, bool topCoverage, bool listTaxa)
+void writeHeader(std::ostream& outfile, bool topCoverage, bool listTaxa)
 {
 	outfile << "#Submatrix\tTotal submatrices\t";
 	outfile << "Matrix 1 name\tMatrix 1 size\tMatrix 1 clade|included|total\t";

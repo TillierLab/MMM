@@ -240,9 +240,9 @@ inline std::string itoa(long number)
 	return ost.str();
 }
 
-void printSets(const TreeType& theSets, std::ofstream& outFile)
+void printSets(const TreeType& theSets, std::ostream& outFile)
 {
-	const bool toFile = outFile.is_open();
+	const bool toFile = outFile.good();
 	TreeType::const_iterator mIter;
 	std::set<std::string>::const_iterator sIter, sIterEnd;
 	for (mIter = theSets.begin(); mIter != theSets.end(); ++mIter) {
