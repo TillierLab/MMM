@@ -5,7 +5,7 @@ double DistanceMatrix::compute_pmb_distance_quick(vector <unsigned char> const& 
 	bool overlap = false;
 
 	unsigned int total=0, different=0, length=sequence1.size();
-	for (int pos = 0; pos < length; pos++)
+	for (unsigned int pos = 0; pos < length; pos++)
 	{	unsigned char const& aa1 = sequence1.at(pos);
 		unsigned char const& aa2 = sequence2.at(pos);
 		
@@ -261,7 +261,7 @@ void DistanceMatrix::create_from_alignment(Alignment alignment, bool quick)
 	//calcualte pairwise distances for all sequences
 	vector<vector<unsigned char > > sequences;
 	sequences.resize(nOfSequences_);
-	for (int i=0; i<nOfSequences_;i++)
+	for (unsigned int i=0; i<nOfSequences_;i++)
 	{	headers_.push_back(alignment.get_header(i));
 		
 		distances2D_.at(i).resize(nOfSequences_);
@@ -278,7 +278,7 @@ void DistanceMatrix::create_from_alignment(Alignment alignment, bool quick)
 		
 		
 		//compute pairwise distances for this sequence
-		for (int j=0; j<i;j++)
+		for (unsigned int j=0; j<i;j++)
 		{	vector <unsigned char> const&  sequence2 = sequences.at(j);
 			double distance = (quick)? compute_pmb_distance_quick(sequence1, sequence2) : compute_pmb_distance(sequence1, sequence2);
 			distances2D_.at(i).at(j) = distance;
@@ -302,7 +302,7 @@ void DistanceMatrix::read_from_filehandle(ifstream& inFile)
 	headers_.reserve(nOfSequences_);
 	distances2D_.resize(nOfSequences_);
 	
-	for (int i = 0; i < nOfSequences_; i++)
+	for (unsigned int i = 0; i < nOfSequences_; i++)
 	{	string header;
 		inFile >> header;
 		headers_.push_back(header);
@@ -310,7 +310,7 @@ void DistanceMatrix::read_from_filehandle(ifstream& inFile)
 		
 		vector <double>& distancesRow = distances2D_.at(i);
 		distancesRow.reserve(nOfSequences_);
-		for (int j = 0; j < nOfSequences_; j++)
+		for (unsigned int j = 0; j < nOfSequences_; j++)
 		{	double distance;
 			inFile >> distance;
 			distancesRow.push_back(max(1e-20,distance)); // Don't allow negative or zero distances
@@ -361,10 +361,10 @@ void DistanceMatrix::print_to_filehandle(ofstream& outFile) const
 	outFile.setf(ios::fixed,ios::floatfield);
 	outFile.precision(6);
 	//output distances
-	for (int i = 0; i < nOfSequences_; i++)
+	for (unsigned int i = 0; i < nOfSequences_; i++)
 	{	//print the name
 		outFile << headers_.at(i).substr(0,10);
-		for (int j = 0; j < nOfSequences_; j++)
+		for (unsigned int j = 0; j < nOfSequences_; j++)
 		{	double const& dst = distances2D_.at(i).at(j);
 			if (dst < 10.0)
 				outFile << ' ';
@@ -402,8 +402,8 @@ void DistanceMatrix::get_distances_as_1d(vector <double>& distances1D) const
 {	validate();
 	distances1D.clear();
 	distances1D.reserve(nOfSequences_*nOfSequences_);
-	for (int i=0; i<nOfSequences_; i++)
-	{	for (int j=0; j<nOfSequences_; j++)
+	for (unsigned int i=0; i<nOfSequences_; i++)
+	{	for (unsigned int j=0; j<nOfSequences_; j++)
 		{	double dstRounded;
 			
 			//reduce precision for compatibility

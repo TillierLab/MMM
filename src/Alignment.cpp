@@ -29,7 +29,7 @@ void Alignment::read_alignment(string const& inFilename, double gapThreshold)
 		
 		//remove trailing carriage return character (applicable to files in DOS format)
 		if (buffer[strlen(buffer)-1] == '\r')
-		{	buffer[strlen(buffer)-1] == '\0';
+		{	buffer[strlen(buffer)-1] = '\0';
 		}
 		
 		if (buffer[0] == '>') //started reading a new sequence
@@ -67,7 +67,7 @@ void Alignment::read_alignment(string const& inFilename, double gapThreshold)
 void Alignment::prepare_sequence(char *buffer)
 {
 	int nOfGaps=0;  //no longer used. will remove
-	for(int i=0; i < strlen(buffer); i++)
+	for(unsigned int i=0; i < strlen(buffer); i++)
 	{	buffer[i] = toupper(buffer[i]);
 		if(isupper(buffer[i]))
 		{	switch (buffer[i])
@@ -92,7 +92,7 @@ void Alignment::prepare_sequence(char *buffer)
 		{	switch (buffer[i])
 			{	case '.': //abezgino: why is dot consireded a gap? OK. pfam format
 				case '_':
-					buffer[i] == '-'; //standartize gaps
+					buffer[i] = '-'; //standartize gaps
 				case '-':
 					nOfGaps++;
 					break;
@@ -112,28 +112,29 @@ void Alignment::prepare_sequence(char *buffer)
 //
 
 void Alignment::add_sequence(string header, string sequence, double gapThreshold)
-{	if (nOfColumns_ < 0)
-	{	nOfColumns_ = sequence.length();
-	} else if (nOfColumns_ != sequence.length())
+{	int nOfColumnsCurrent = sequence.length();
+	if (nOfColumns_ < 0)
+	{	nOfColumns_ = nOfColumnsCurrent;
+	} else if (nOfColumns_ != nOfColumnsCurrent)
 	{	stringstream err;
-		err << "inconsistent number of columns: " << nOfColumns_ << " != " << sequence.length() << " for sequence: " << header << " of " << get_name();
+		err << "inconsistent number of columns: " << nOfColumns_ << " != " << nOfColumnsCurrent << " for sequence: " << header << " of " << get_name();
 		throw_error(err.str());
 	}
 	
 	int nOfGaps = sequence_count_gaps(sequence);
-	if (nOfGaps < sequence.length() && (gapThreshold < 0 || (double) nOfGaps / sequence.length() < gapThreshold))
+	if (nOfGaps < nOfColumnsCurrent && (gapThreshold < 0 || (double) nOfGaps / nOfColumnsCurrent < gapThreshold))
 	{	headers_.push_back(header);
 		sequences_.push_back(sequence);
 		nOfSequences_++;
 	} else
-	{	cout << "Warning: sequence: " << header << " of " << get_name() << " was skipped due to high fraction of gaps: " << nOfGaps << "/" << sequence.length() << endl;
+	{	cout << "Warning: sequence: " << header << " of " << get_name() << " was skipped due to high fraction of gaps: " << nOfGaps << "/" << nOfColumnsCurrent << endl;
 	}
 }
 //
 
 int Alignment::sequence_count_gaps(string const& sequence)
 {	int nOfGaps = 0;
-	for(int i=0; i<sequence.length(); i++)
+	for(unsigned int i=0; i<sequence.length(); i++)
 	{	if (sequence.at(i) == '-' || sequence.at(i) == 'X')
 			nOfGaps++;
 	}
@@ -179,7 +180,7 @@ Alignment Alignment::get_slices(vector<pair<int, int > > const& ranges, double g
 	
 	stringstream sliceName;
 	sliceName << get_name() << " (";
-	for(int k=0; k<ranges.size(); k++)
+	for(unsigned int k=0; k<ranges.size(); k++)
 	{	if (k>0)
 			sliceName << ",";
 		sliceName << ranges.at(k).first << "-" << ranges.at(k).second;
@@ -192,7 +193,7 @@ Alignment Alignment::get_slices(vector<pair<int, int > > const& ranges, double g
 	for(int i=0; i<get_nOfSequences(); i++)
 	{	string sequenceSlice = "";
 		int min=1;
-		for(int j=0; j<ranges.size(); j++)
+		for(unsigned int j=0; j<ranges.size(); j++)
 		{	int const& start = ranges.at(j).first;
 			int const& end   = ranges.at(j).second;
 			
@@ -227,7 +228,7 @@ void Alignment::print_to_file(string const& outFilepath) const
 	{	throw_error("cannot create file: " + outFilepath);
 	}
 		
-	for (int i=0; i<nOfSequences_; i++)
+	for (unsigned int i=0; i<nOfSequences_; i++)
 	{	outFile << '>' << headers_.at(i) << '\n' << sequences_.at(i) << '\n';
 	}
 		

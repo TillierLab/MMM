@@ -45,7 +45,7 @@ public:
 	Alignment append_alignment(Alignment const& other);
 		
 	Alignment get_slices(vector<pair<int, int > > const& ranges, double gapThreshold = -1) const;
-	Alignment get_slice(int start, int end, double gapThreshold = -1) const {pair <int,int> range (start,end); vector<pair<int, int > > ranges; ranges.push_back(range); get_slices(ranges, gapThreshold);}
+	Alignment get_slice(int start, int end, double gapThreshold = -1) const {pair <int,int> range (start,end); vector<pair<int, int > > ranges; ranges.push_back(range); return get_slices(ranges, gapThreshold);}
 	void print_to_file(string const& outFilepath) const;
 
 	int get_nOfColumns() const {validate(); return nOfColumns_;}

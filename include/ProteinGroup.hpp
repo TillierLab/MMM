@@ -16,7 +16,7 @@ class ProteinGroup {
 protected:
 	bool valid_;
 	string name_;
-	int nOfSequences_;
+	unsigned int nOfSequences_;
 	vector <string> headers_;
 	void init(void){valid_=false; nOfSequences_=0; headers_.clear();}
 

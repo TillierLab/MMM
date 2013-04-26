@@ -891,7 +891,7 @@ void CHardAlgorithm::maxCliquesEmu()
 			for (unsigned int v = startv; v < nverts; v++)
 			{	if (end_ptr >= _mcVStack.size())
 				{
-					#ifdef DEBUG
+					#ifdef VERBOSE
 					cout << "Warning: _mcVStack: end_ptr " << end_ptr << " >= " << _mcVStack.size() << " Resizing ..." << endl;
 					#endif
 					_mcVStack.resize(_mcVStack.size()*2);
@@ -914,7 +914,7 @@ void CHardAlgorithm::maxCliquesEmu()
 					
 					if (cur_size >= _mcCliqueStack.size())
 					{
-						#ifdef DEBUG
+						#ifdef VERBOSE
 						cout << "Warning: _mcCliqueStack: cur_size " << cur_size << " >= " << _mcCliqueStack.size() << " Resizing ..." << endl;
 						#endif
 						_mcCliqueStack.resize(_mcCliqueStack.size()*2);
@@ -953,7 +953,7 @@ void CHardAlgorithm::maxCliquesEmu()
 							
 							if (write_ptr >= _mcVStack.size())
 							{
-								#ifdef DEBUG
+								#ifdef VERBOSE
 								cout << "Warning: _mcVStack: write_ptr " << write_ptr << " >= " << _mcVStack.size() << " Resizing ..." << endl;
 								#endif
 								_mcVStack.resize(_mcVStack.size()*2);
@@ -995,7 +995,7 @@ void CHardAlgorithm::maxCliquesEmu()
 						
 						if (depth*4+2 >= _mcPtrStack.size())
 						{
-							#ifdef DEBUG
+							#ifdef VERBOSE
 							cout << "Warning: _mcPtrStack: depth " << depth << "*4+2 >= " << _mcPtrStack.size() << " Resizing ..." << endl;
 							#endif
 							_mcPtrStack.resize(_mcPtrStack.size()*2);

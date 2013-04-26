@@ -52,15 +52,12 @@ static void printUsage1(const string& pname);
 static void printUsage2(const string& pname);
 static void printUsage(const string& pname);
 static void printVerboseUsage(const string& pname);
-static int readDistFile(const string& which, const string& distfileName, vector<double>& distances, vector<string>& names,
-						vector<string>& taxLabels, bool useTaxInfo);
 static size_t findBiggestPossibleMatch(const vector<string>& taxLabels1, const vector<string>& taxLabels2,
 									   const bool useTaxInfo);
 //static void processTaxonLabels(vector<string>& taxLabels1, vector<string>& taxLabels2, string& reqTaxName,
 //							   vector<int>& taxIndices1, vector<int>& taxIndices2, vector<string>& taxLabels, int& reqTaxIndex);
 static void processTaxonLabels(vector<string> taxLabels, const string reqTaxName, vector<int>& taxIndices,
 										 vector<string>& taxLabelsGlobal, int& reqTaxIndexGlobal);
-static string itoa(int number);
 static void showStats(vector<int>& taxIndices1, vector<int>& taxIndices2, vector<string>& taxLabels);
 static int calcTaxonCombinations(vector<int>& taxIndices1, vector<int>& taxIndices2);
 static string makeStateSaveFileName(const string& first, const string& second);
@@ -139,7 +136,7 @@ int main(int argc, const char* argv[])
 
 		if (!doShowStats || !haveDist1 || !haveDist2)
 		{
-			if (!haveBatch && (!haveDist1 || !haveDist2) ||
+			if ((!haveBatch && (!haveDist1 || !haveDist2)) ||
 				!options.parse("-o", &outfileName) || !options.parse("-a", &allow))
 			{
 				printUsage(options.programName());
@@ -417,7 +414,7 @@ int main(int argc, const char* argv[])
 		//debug code to ensure that new matchPotential is never larger than quickMatchPotential
 		if (matchPotential > quickMatchPotential)
 		{	matchPotential = quickMatchPotential;
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << batchIt->first << '\t' << batchIt->second << "\tError: matchPotential=" << matchPotential << " > quickMatchPotential=" << quickMatchPotential;
 			cerr << batchIt->first << '\t' << batchIt->second << "\tError: matchPotential=" << matchPotential << " > quickMatchPotential=" << quickMatchPotential;
 			handleErrors(ignoreErrors, outfile);
@@ -807,45 +804,12 @@ static void printVerboseUsage(const string& pname)
 }
 //
 
-static int readDistFile(const string& which, const string& distfileName, vector<double>& distances,
-						vector<string>& names, vector<string>& taxLabels, bool useTaxInfo)
-{
-	ifstream distfile(distfileName.c_str());
-	if (!distfile.is_open()) {
-		cout << "\nError: cannot open file " << distfileName << endl;
-		exit(1);
-	}
-	int num;
-	distfile >> num;
-	names.resize(num);
-	taxLabels.resize(num);
-	distances.clear();
-	distances.reserve(num*num);
-	string theName;
-	double theDist;
-	int i, j;
-	for (i = 0; i < num; ++i) {
-		distfile >> theName;
-		if (useTaxInfo) {
-			taxLabels[i] = theName.substr(0, theName.find('|')); // If not found, selects the whole name
-		}
-		names[i] = which + theName;
-		for (j = 0; j < num; ++j) {
-			distfile >> theDist;
-			distances.push_back(max(1e-20,theDist)); // Don't allow negative or zero distances
-		}
-	}
-	distfile.close();
-	return num;
-}
-//
-
 //abezgino
 //rearrange the matrices to ensure that the sequences for the reqTax are placed at the top
 static void rearrangeMatrix(vector<string>& names, vector<string>& taxLabels, vector<double>& distances, const string reqTaxName)
 {	
-	int size = taxLabels.size();
-	vector<int> map; //mapping of original indices to the rearranged ones
+	unsigned int size = taxLabels.size();
+	vector<unsigned int> map; //mapping of original indices to the rearranged ones
 	map.reserve(size);
 			
 	unsigned int firstNonReqTaxIdx = 0;
@@ -931,14 +895,6 @@ size_t findBiggestPossibleMatch(const vector<string>& taxLabels1, const vector<s
 		answer += min(mIt->second.first, mIt->second.second);
 	}
 	return answer;
-}
-//
-
-static string itoa(int number)
-{
-	ostringstream ost;
-	ost << number;
-	return ost.str();
 }
 //
 
@@ -1045,7 +1001,7 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 	//try to find the matrix in the cache
 	if(!find_in_dist_matrices_cache(distMatricesCache, distFilename))
 	{
-		#ifdef DEBUG
+		#ifdef VERBOSE
 		cout << "\nWarning: matrix [" << distFilename << "] is not cached. Trying to read from file. Cache size=" << distMatricesCache.size() << '/' << DISTANCE_MATRIX_CACHE_SIZE << endl;
 		#endif
 		distMatricesCache.push_front(DistanceMatrix(distFilename));
@@ -1063,18 +1019,18 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 		
 		if (aln2pmb && extension == "aln")
 		{
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "\tWarning: extension [" << extension <<"] found. Calculating PMB distnce matrix from alignment ..." << endl;
 			#endif
 			
 			Alignment const& alignment = getAlignment(distFilenamePrefix, filename, alignmnentsCache, gapThreshold);
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "Alignment length: " << alignment.get_nOfColumns() << endl;
 			//cout << alignment.get_sequence(1) << endl;
 			#endif
 			if(subAln)
 			{	Alignment alignmentSlice = getSlice(distFilenameSS, alignment, gapThreshold);
-				#ifdef DEBUG
+				#ifdef VERBOSE
 				cout << "Slice length: " << alignmentSlice.get_nOfColumns() << endl;
 				//cout << alignmentSlice.get_sequence(1) << endl;
 				#endif
@@ -1113,7 +1069,7 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 			}
 		} else
 		{
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			if(extension == "aln")
 				cout << "\tWarning: extension [" << extension <<"] found. Forgot to add -aln2pmb option?" << endl;
 			#endif
@@ -1122,7 +1078,7 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 		
 		if(distMatricesCache.size() > DISTANCE_MATRIX_CACHE_SIZE)
 		{	
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "\tWarning: cache has too many elements. Removing the last one [" << distMatricesCache.back().get_name() << "]" << endl;
 			#endif
 			distMatricesCache.pop_back();
@@ -1156,7 +1112,7 @@ static Alignment const& getAlignment(const string& inFilepathPrefix, const strin
 	//if(! Alignment::find_in_cache(alignmnentsCache, inFilename))
 	if(!find_in_alignments_cache(alignmnentsCache, inFilename))
 	{
-		#ifdef DEBUG
+		#ifdef VERBOSE
 		cout << "\tWarning: alignment [" << inFilename << "] not cached. Trying to read from file. Cache size=" << alignmnentsCache.size() << '/' << ALIGNMENT_CACHE_SIZE << endl;
 		#endif
 		alignmnentsCache.push_front(Alignment(inFilename));
@@ -1168,7 +1124,7 @@ static Alignment const& getAlignment(const string& inFilepathPrefix, const strin
 
 		if(alignmnentsCache.size() > ALIGNMENT_CACHE_SIZE)
 		{
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "\tWarning: cache has too many elements. Removing the last one [" << alignmnentsCache.back().get_name() << "]" << endl;
 			#endif
 			alignmnentsCache.pop_back();
@@ -1188,7 +1144,7 @@ static bool find_in_alignments_cache(list <Alignment>& cache, string const& name
 	{	i++;
 		if (it->get_name() == name)
 		{	found = true;
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "\talignment [" << name << "] is cached at position " << i << " of " << cache.size() << endl;
 			#endif
 			//move this element to the front (as the most recently used)
@@ -1206,7 +1162,7 @@ static bool find_in_dist_matrices_cache(list <DistanceMatrix>& cache, string con
 	{	i++;
 		if (it->get_name() == name)
 		{	found = true;
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << "\tmatrix [" << name << "] is cached at position " << i << " of " << cache.size() << endl;
 			#endif
 			//move this element to the front (as the most recently used)
@@ -1222,7 +1178,7 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 {	string name;
 	getline(distFilenameSS, name, ':');
 	
-	#ifdef DEBUG
+	#ifdef VERBOSE
 	cout << "\tWarning: a sub-alignment found: name=[" << name << "]:";
 	#endif
 	
@@ -1236,13 +1192,13 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 		distFilenameSS.ignore(1);
 		distFilenameSS >> end;
 
-		#ifdef DEBUG
+		#ifdef VERBOSE
 		cout << " [" << start <<"]-[" << end << "]";
 		#endif
 		
 		if(!distFilenameSS.eof() && distFilenameSS.peek() == 'r') //"reverse-slice" mode, where only the slice itself is removed
 		{	distFilenameSS.ignore(1);
-			#ifdef DEBUG
+			#ifdef VERBOSE
 			cout << 'r';
 			#endif
 			if (start > 1)
@@ -1259,7 +1215,7 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 		{	break; //finished reading the ranges, ignore the rest (if any)
 		}
 	}
-	#ifdef DEBUG
+	#ifdef VERBOSE
 	cout << endl;
 	#endif
 	if (distFilenameSS.fail() || ranges.size() < 1)
