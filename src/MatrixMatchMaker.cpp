@@ -20,9 +20,7 @@
 #include <ctime>
 
 #include <boost/iostreams/device/file_descriptor.hpp>
-//#include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
-//#include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 
 #include "mmm_algorithm.h"
@@ -33,8 +31,12 @@
 #include "Alignment.hpp"
 #include "DistanceMatrix.hpp"
 
-#define ALIGNMENT_CACHE_SIZE 10
-#define DISTANCE_MATRIX_CACHE_SIZE 1000
+#include "Parameters.hpp"
+
+#include "getRSS.h"
+
+
+
 
 using namespace std;
 using namespace boost::iostreams;
@@ -48,14 +50,9 @@ struct CmpTreesByWeight
 };
 
 
-static void printUsage1(const string& pname);
-static void printUsage2(const string& pname);
-static void printUsage(const string& pname);
-static void printVerboseUsage(const string& pname);
+
 static size_t findBiggestPossibleMatch(const vector<string>& taxLabels1, const vector<string>& taxLabels2,
 									   const bool useTaxInfo);
-//static void processTaxonLabels(vector<string>& taxLabels1, vector<string>& taxLabels2, string& reqTaxName,
-//							   vector<int>& taxIndices1, vector<int>& taxIndices2, vector<string>& taxLabels, int& reqTaxIndex);
 static void processTaxonLabels(vector<string> taxLabels, const string reqTaxName, vector<int>& taxIndices,
 										 vector<string>& taxLabelsGlobal, int& reqTaxIndexGlobal);
 static void showStats(vector<int>& taxIndices1, vector<int>& taxIndices2, vector<string>& taxLabels);
@@ -67,11 +64,11 @@ static void rearrangeMatrix(vector<string>& names, vector<string>& taxLabels, ve
 
 
 
-static unsigned int getDistMatrix(const string& which, const string& distfileNamePrefix, const string& distfileName,
+static unsigned int getDistMatrix(const string& which, const string& distfileName,
 									  list <DistanceMatrix>& distMatricesCache, list <Alignment>& alignmnentsCache,
 									  vector <double>& distances, vector <string>& names, vector <string>& taxLabels,
-									  bool useTaxInfo, bool aln2pmb, bool printPmb, bool printSlice, double gapThreshold);
-static Alignment const& getAlignment(const string& inFilepathPrefix, const string& inFileName, list <Alignment>& alignmnentsCache, double gapThreshold);
+									  bool useTaxInfo, Parameters params);
+static Alignment const& getAlignment(const string& inFileName, list <Alignment>& alignmnentsCache, Parameters params);
 static bool find_in_alignments_cache(list <Alignment>& cache, string const& name);
 static bool find_in_dist_matrices_cache(list <DistanceMatrix>& cache, string const& name);
 static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignment, double gapThreshold);
@@ -79,184 +76,29 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 
 int main(int argc, const char* argv[])
 {
+
+
+	cout << "Started" << endl;
 	// Read arguments from the command line:
-	string distfileName1, distfileName2, batchFileName, outfileName, reqTaxName, distfileNamesPrefix, stateFileName;
-	int strictSize = -1;
-	int minSize = 0;
-	int maxTrees = numeric_limits<int>::max();
-	int rangeStart = -1;
-	int rangeEnd = numeric_limits<int>::max();
-	bool tabulateTop = false;
-	bool useTaxInfo = false;
-	bool reqTax = false;
-	bool tabDelimitedTable = false;
-	bool brief = false;
-	bool verbose = false;
-	bool doShowStats = false;
-	bool outputZeros = false;
-	bool stateRestore = false;
-	bool exactTime = false;
-	bool useHardware = false;
-	double allow;
-	// MMML extensions: New 2010.02.28: RLC:
-	string treeFileName, ignoreTaxaFileName;
-	int minBootstrapSupport = 1;
-	bool MMMLmode = false, listTaxa = false, topCoverage = false, LverboseMode = false; 
-	// New 2010.02.28: RLC.
-
+	Parameters params;
+	params.process(argc, argv);
 	
-	double cutoffLower = 0.000011; //protdist's threshold of 0.000010 fits here
-	double cutoffUpper = 1.0e+10;
-	bool logDistances = false;
+	cout << "params done" << endl;
 	
-	bool noHeader = false;
-	bool onlyHeader = false;
-	bool onlyMP = false;
-	bool quickMP = false;
-	bool ignoreErrors = false;
-	
-	bool aln2pmb = false;
-	bool printPmb = false;
-	bool printSlice = false;
-	double gapThreshold = -1; //by default gap threshold for alignments is disabled
-	
-	bool gzipIn = false;
-	bool gzipOut = false;
-	
-	{
-		CmdLineArgParser options(argc, argv);
-		doShowStats = options.parse("-stats");
-		if (options.parse("-help")) printVerboseUsage(options.programName());
-		
-		bool haveDist1 = options.parse("-d1", &distfileName1);
-		bool haveDist2 = options.parse("-d2", &distfileName2);
-		bool haveBatch = options.parse("-b", &batchFileName);
-
-		stateRestore = options.parse("-restore", &stateFileName);
-
-		if (!doShowStats || !haveDist1 || !haveDist2)
-		{
-			if ((!haveBatch && (!haveDist1 || !haveDist2)) ||
-				!options.parse("-o", &outfileName) || !options.parse("-a", &allow))
-			{
-				printUsage(options.programName());
-			}
-		}
-
-		if (haveBatch && stateRestore)
-		{
-			printUsage(options.programName());
-		}
-
-		brief = options.parse("-brief"); // optional; edit New 2010.03.01: RLC, fixed by abezginov
-		tabDelimitedTable = (batchFileName.empty() && options.parse("-table")); // optional, precluded if -b is selected
-		if (!batchFileName.empty() && !distfileName1.empty()) printUsage(options.programName());
-		tabulateTop = options.parse("-top"); // optional;
-		if (tabulateTop && !tabDelimitedTable) printUsage(options.programName());
-		useTaxInfo = options.parse("-u"); // optional
-		options.parse("-sz", &strictSize); // optional
-		if (strictSize != -1 && strictSize < 3) {
-			cout << "strictSize must be 3 or more." << endl;
-			exit(1);
-		}
-		if (options.parse("-minsize", &minSize) && minSize < 3) // optional
-		{
-			cout << "minSize must be 3 or more." << endl;
-			exit(1);
-		}
-		options.parse("-maxtrees", &maxTrees); // optional
-		verbose = options.parse("-v"); // optional
-		options.parse("-req", &reqTaxName); // optional
-		doShowStats = options.parse("-stats");
-		options.parse("-p", &distfileNamesPrefix);
-		outputZeros = options.parse("-z");
-		exactTime = options.parse("-exacttime");
-		useHardware = options.parse("-hard");
-		options.parse("-lower", &cutoffLower);
-		options.parse("-upper", &cutoffUpper);
-		logDistances = options.parse("-log"); 
-		ignoreErrors = options.parse("-ignoreerrors");
-		
-		
-		reqTax = !reqTaxName.empty();
-		if (reqTax && !useTaxInfo)
-		{	cout << "\nError: Must use taxon info when requiring a taxon." << endl;
-			exit(1);
-		}
-		
-		if (reqTax)
-			cout << "Warning: -req option is currently broken (may return lower scores than it should). Use with caution." << endl;
-			
-			
-		// MMML extensions: New 2010.02.28: RLC:
-		options.parse("-Lt", &treeFileName); // optional
-		if (!treeFileName.empty()) {
-			if (brief) printUsage(options.programName()); // incompatible options
-			MMMLmode = true;
-			// Note: outfileName now refers to MMML output
-			options.parse("-Li", &ignoreTaxaFileName); // optional
-			options.parse("-Lb", &minBootstrapSupport); // optional
-			listTaxa = options.parse("-List"); // optional
-			topCoverage = options.parse("-LtopCov"); // optional
-			LverboseMode = options.parse("-Lv"); // optional
-		}
-		// New 2010.02.28: RLC.
-			
-		// abezgino 2011.01.21
-		if (brief)
-		{	quickMP = options.parse("-quickmp");
-			onlyMP = options.parse("-onlymp");
-			if (onlyMP) outputZeros = true;
-		}
-		
-		
-		if (brief || MMMLmode)
-		{	noHeader = options.parse("-noheader"); 
-			onlyHeader = options.parse("-onlyheader");
-			if (onlyHeader && noHeader)
-			{	cout << "Incompatible options: -noheader -onlyheader" << endl;
-				printUsage(options.programName());
-			}
-		}
-		
-		
-		const int foundRangeStart = options.parse("-rangeStart", &rangeStart); // optional
-		const int foundRangeEnd = options.parse("-rangeEnd", &rangeEnd); // optional
-		if (foundRangeStart ^ foundRangeEnd) printUsage(options.programName());
-		
-		aln2pmb = options.parse("-aln2pmb"); 
-		if (aln2pmb)
-		{	options.parse("-gapthresh", &gapThreshold);
-			printPmb = options.parse("-printpmb");
-			printSlice = options.parse("-printslice");
-		}
-		
-		gzipIn = options.parse("-gzipin"); 
-		gzipOut = options.parse("-gzipout"); 
-		
-		if (!options.empty())
-		{	cout << "Unrecognized option:" << endl;
-			options.print();
-			cout << endl;
-			printUsage(options.programName());
-		}
-	}
-	//
-
 	//populate the list of pairs of distance matrices to run
 	vector<pair<string, string> > theDistFileNames;
-	if (batchFileName.empty())
-	{	theDistFileNames.push_back(pair<string, string>(distfileName1, distfileName2));
+	if (params.batchFileName.empty())
+	{	theDistFileNames.push_back(pair<string, string>(params.distfileName1, params.distfileName2));
 	} 
 	else
 	{	filtering_stream<input> batchFile;
-		if (gzipIn)
+		if (params.gzipIn)
 		{	batchFile.push(gzip_decompressor());
 		}
 		try
-		{	batchFile.push(file_descriptor_source(batchFileName));
+		{	batchFile.push(file_descriptor_source(params.batchFileName));
 		} catch (exception& e)
-		{	cout << "\nError: cannot open file " << batchFileName << "\nReason:" << e.what() << endl;
+		{	cout << "\nError: cannot open file " << params.batchFileName << "\nReason:" << e.what() << endl;
 			exit(1);
 		}
 		
@@ -275,10 +117,10 @@ int main(int argc, const char* argv[])
 	}
 
 	// MMML extensions: New 2010.02.28: RLC:
-	const set<string> ignoreTaxa(identifyTaxaToIgnore(ignoreTaxaFileName));
+	const set<string> ignoreTaxa(identifyTaxaToIgnore(params.ignoreTaxaFileName));
 	
 	const pair<TreeType, map<string, set<string> > > theClades(
-	retrieveRefCladesFromFile(treeFileName, minBootstrapSupport));
+	retrieveRefCladesFromFile(params.treeFileName, params.minBootstrapSupport));
 	const TreeType& refSets = theClades.first; // for convenience
 	const map<string, set<string> >& refClades = theClades.second;
 	// These are empty if we're not in MMML mode...
@@ -287,15 +129,14 @@ int main(int argc, const char* argv[])
 	ofstream tablefile; // New 2010.01.23: RLC edit
 	filtering_stream<output> outfile;
 
-	//outfileRaw.open(outfileName.c_str());
-	if (gzipOut)
-	{	//outfileRaw.open(outfileName.c_str(), ios_base::out | ios_base::binary);
-		outfile.push(gzip_compressor());
+
+	if (params.gzipOut)
+	{	outfile.push(gzip_compressor());
 	}
 	try
-	{	outfile.push(file_descriptor_sink(outfileName.c_str()));
+	{	outfile.push(file_descriptor_sink(params.outfileName.c_str()));
 	} catch (exception& e)
-	{	cout << "\nError: cannot open file " << outfileName << "\nReason:" << e.what() << endl;
+	{	cout << "\nError: cannot open file " << params.outfileName << "\nReason:" << e.what() << endl;
 		exit(1);
 	}
 
@@ -303,8 +144,8 @@ int main(int argc, const char* argv[])
 
 	
 	// MMML extensions: New 2010.02.28: RLC:
-	if (MMMLmode)
-	{	if (LverboseMode) writeTree(outfile, refSets, treeFileName);
+	if (params.MMMLmode)
+	{	if (params.MMMLmode && params.LverboseMode) writeTree(outfile, refSets, params.treeFileName);
 	}
 	// MMML extensions: New 2010.02.28: RLC.
 	
@@ -312,24 +153,24 @@ int main(int argc, const char* argv[])
 	
 	
 	//abezgino 2011.01.21 : print header when in batch mode
-	if (!noHeader)
-	{	if (MMMLmode) writeHeader(outfile, topCoverage, listTaxa);
-		if (brief)
+	if (!params.noHeader)
+	{	if (params.MMMLmode) writeHeader(outfile, params.topCoverage, params.listTaxa);
+		if (params.brief)
 		{	outfile << "#Matrix1\tMatrix2\ttaxonCombinations";
-			if (quickMP) outfile <<"\tquickMP";
+			if (params.quickMP) outfile <<"\tquickMP";
 			outfile << "\tMP";	
-			if (!onlyMP) outfile << "\ttime\tscore\tRMSD\ttrees";
+			if (!params.onlyMP) outfile << "\ttime\tscore\tRMSD\ttrees";
 			outfile << endl;
 		}
 			
-		if (onlyHeader)
+		if (params.onlyHeader)
 		{	outfile.strict_sync();
 			outfile.reset();
 			exit (0);
 		}
 	}
 
-	if (useHardware)
+	if (params.useHardware)
 	{
 		if (!CHardAlgorithm::initHardware())
 		{
@@ -349,7 +190,7 @@ int main(int argc, const char* argv[])
 		cout << batchIt->first << '\t' << batchIt->second; 
 	
 		// Brief format output: start each row with the two matrix file names
-		if(brief && outputZeros) 
+		if(params.brief && params.outputZeros) 
 		{	
 			outfile << batchIt->first << '\t' << batchIt->second;
 		}
@@ -358,57 +199,91 @@ int main(int argc, const char* argv[])
 		vector<double> distances1, distances2;
 		vector<string> names1, names2, taxLabels1, taxLabels2, taxLabels;
 
-		//const int num1 = readDistFile("1:", distfileNamesPrefix + batchIt->first, distances1, names1, taxLabels1, true);
-		//const int num2 = readDistFile("2:", distfileNamesPrefix + batchIt->second, distances2, names2, taxLabels2, true);
 		
 		int num1, num2;
 		try
-		{	num1 = getDistMatrix("1:", distfileNamesPrefix, batchIt->first, distMatricesCache, alignmentsCache, distances1, names1, taxLabels1, true, aln2pmb, printPmb, printSlice, gapThreshold);
-			num2 = getDistMatrix("2:", distfileNamesPrefix, batchIt->second, distMatricesCache, alignmentsCache, distances2, names2, taxLabels2, true, aln2pmb, printPmb, printSlice, gapThreshold);
+		{	num1 = getDistMatrix("1:", batchIt->first, distMatricesCache, alignmentsCache, distances1, names1, taxLabels1, true, params);
+			num2 = getDistMatrix("2:", batchIt->second, distMatricesCache, alignmentsCache, distances2, names2, taxLabels2, true, params);
 		} catch (exception &e)
 		{	cout << "\tError: Could not obtain at least one distance matrix: " << e.what() << endl;
 			cerr << "\tError: Could not obtain at least one distance matrix: " << e.what() << endl;
-			if(brief && outputZeros) 
+			if(params.brief && params.outputZeros) 
 			{	outfile << endl;
 			}
 			continue;
 		}
 		
-		if (reqTax)
-		{	rearrangeMatrix(names1, taxLabels1, distances1, reqTaxName);
+		if (params.reqTax)
+		{	rearrangeMatrix(names1, taxLabels1, distances1, params.reqTaxName);
 			//rearrangeMatrix(names2, taxLabels2, distances2, reqTaxName);
 
 			//reqTax=false; //debug - check whether simply rearranging the matrices affects the results
 		}
-
+		#ifdef VERBOSE
+		cout << "reqTax done" << endl;
+		#endif
 		// Assign unique integers to taxon labels
 		vector<int> taxIndices1, taxIndices2;
 		int reqTaxIndex;
-		processTaxonLabels(taxLabels1, reqTaxName, taxIndices1, taxLabels, reqTaxIndex);
-		processTaxonLabels(taxLabels2, reqTaxName, taxIndices2, taxLabels, reqTaxIndex);
+		processTaxonLabels(taxLabels1, params.reqTaxName, taxIndices1, taxLabels, reqTaxIndex);
+		processTaxonLabels(taxLabels2, params.reqTaxName, taxIndices2, taxLabels, reqTaxIndex);
+		
+		#ifdef VERBOSE
+		cout << "processTaxonLabels done" << endl;
+		#endif
 		
 		// showstats: just show information about matrices and do nothing
-		if (doShowStats)
-		{
-			showStats(taxIndices1, taxIndices2, taxLabels);
+		if (params.doShowStats)
+		{	showStats(taxIndices1, taxIndices2, taxLabels);
 			continue;
 		}
 	
-		processDistances(distances1, cutoffLower, cutoffUpper, logDistances);
-		processDistances(distances2, cutoffLower, cutoffUpper, logDistances);
+		processDistances(distances1, params.cutoffLower, params.cutoffUpper, params.logDistances);
+		processDistances(distances2, params.cutoffLower, params.cutoffUpper, params.logDistances);
 
+		#ifdef VERBOSE
+		cout << "processDistances done" << endl;
+		#endif
+		
 		// Initialize the algorithm
-		CMMMAlgorithm* algo = new CHardAlgorithm(allow, distances1, distances2,
-				taxIndices1, taxIndices2, useTaxInfo, reqTaxIndex, 
-				reqTax, strictSize, maxTrees, minSize, useHardware);
-
+		CMMMAlgorithm* algo = NULL;
+		try 
+		{	algo = new CHardAlgorithm(params.allow, distances1, distances2,
+				taxIndices1, taxIndices2, params.useTaxInfo, reqTaxIndex, 
+				params.reqTax, params.strictSize, params.maxTrees, params.minSize, params.useHardware);
+		}catch (exception &e)
+		{	cout << "\tError: Could not initialize the algorithm: " << e.what() << endl;
+			cerr << "\tError: Could not initialize the algorithm: " << e.what() << endl;
+			if(params.brief && params.outputZeros) 
+			{	outfile << endl;
+			}
+			sighand_restore();
+			delete algo;
+			continue;
+		}
+		
+		#ifdef VERBOSE
+		cout << "algo done" << endl;
+		#endif
+		
 		// Calculate match potential and taxon combinations
 		int taxonCombinations = calcTaxonCombinations(taxIndices1, taxIndices2);
 		
+		#ifdef VERBOSE
+		cout << "calcTaxonCombinations done" << endl;
+		#endif
 		
 		//abezgino 2011.01.21: calculate both match potentials (should not add too much overhead)
-		int quickMatchPotential = findBiggestPossibleMatch(taxLabels1, taxLabels2, useTaxInfo);
+		int quickMatchPotential = findBiggestPossibleMatch(taxLabels1, taxLabels2, params.useTaxInfo);
+		
+		#ifdef VERBOSE
+		cout << "findBiggestPossibleMatch done" << endl;
+		#endif
+		
 		int matchPotential = algo->calcMatchPotential();
+		#ifdef VERBOSE
+		cout << "calcMatchPotential done" << endl;
+		#endif
 		
 		//abezgino 2011.01.21
 		//debug code to ensure that new matchPotential is never larger than quickMatchPotential
@@ -417,19 +292,19 @@ int main(int argc, const char* argv[])
 			#ifdef VERBOSE
 			cout << batchIt->first << '\t' << batchIt->second << "\tError: matchPotential=" << matchPotential << " > quickMatchPotential=" << quickMatchPotential;
 			cerr << batchIt->first << '\t' << batchIt->second << "\tError: matchPotential=" << matchPotential << " > quickMatchPotential=" << quickMatchPotential;
-			handleErrors(ignoreErrors, outfile);
+			handleErrors(params.ignoreErrors, outfile);
 			#endif
 	
 		}
 		// Brief format output: print taxon combinations and match potential before analysis begins
-		if(outputZeros && brief)
+		if(params.brief && params.outputZeros)
 		{
 			//abezgino: print known information about current combination before the actual analysis. Make taxonCombinations optional? 
 			//abezgino 2011.01.21
 			outfile << '\t' << taxonCombinations;
-			if (quickMP) outfile << '\t' << quickMatchPotential;
+			if (params.quickMP) outfile << '\t' << quickMatchPotential;
 			outfile << '\t' << matchPotential;
-			if (onlyMP)
+			if (params.onlyMP)
 			{	cout << endl;
 				outfile << endl;
 				continue;
@@ -442,11 +317,12 @@ int main(int argc, const char* argv[])
 		
 		
 		// Check that the required taxon name, if specified, is in both matrices:
-		if (reqTax && (find(taxLabels1.begin(), taxLabels1.end(), reqTaxName) == taxLabels1.end() ||
-							find(taxLabels2.begin(), taxLabels2.end(), reqTaxName) == taxLabels2.end()
-							)
+		if (	params.reqTax &&
+				(	find(taxLabels1.begin(), taxLabels1.end(), params.reqTaxName) == taxLabels1.end() ||
+					find(taxLabels2.begin(), taxLabels2.end(), params.reqTaxName) == taxLabels2.end()
+				)
 			)
-		{	if (brief && outputZeros) outfile << "\t0\t0\t0\t0" << endl; //format: time	score	rmsd	trees
+		{	if (params.brief && params.outputZeros) outfile << "\t0\t0\t0\t0" << endl; //format: time	score	rmsd	trees
 			delete algo;
 			continue; // New 2010.01.23: RLC bug fix
 		}
@@ -455,17 +331,16 @@ int main(int argc, const char* argv[])
 		Timeval startTime, endTime;
 		WeightedProteinPairVecVec resultVec;
 
-		int wkRangeStart = max(0, min(rangeStart, num1));
-		int wkRangeEnd = min(rangeEnd, num1);
+		int wkRangeStart = max(0, min(params.rangeStart, num1));
+		int wkRangeEnd = min(params.rangeEnd, num1);
 		int maxScore = 0;
 
 		timer_gettime(&startTime);
 	
-		if (stateRestore)
+		if (params.stateRestore)
 		{
-			if (!algo->stateRestore(stateFileName))
-			{
-				cout << "\tError loading state file " << stateFileName << endl;
+			if (!algo->stateRestore(params.stateFileName))
+			{	cout << "\tError loading state file " << params.stateFileName << endl;
 				exit(1);
 			}
 		}
@@ -485,7 +360,7 @@ int main(int argc, const char* argv[])
 				continue;
 			}
 			algo->calcScores(resultVec);
-			algo->printBonusStats(outfile, brief);
+			algo->printBonusStats(outfile, params.brief);
 		}
 		catch (bad_alloc&)
 		{
@@ -496,29 +371,24 @@ int main(int argc, const char* argv[])
 		}
 		
 		timer_gettime(&endTime);
-
-		double runtime = timer_diff(&startTime, &endTime);
-		if (!exactTime)
-		{
-			runtime = floor(runtime + 0.5);
-		}
-
+		double runtimeExact = timer_diff(&startTime, &endTime);
+		double runtime = (params.exactTime) ? runtimeExact : floor(runtimeExact + 0.5);
 		cout << "\tTime: " << runtime;
 
-		if (maxTrees >= 0 && algo->maxTreesReached())
+		if (params.maxTrees >= 0 && algo->maxTreesReached())
 		{
-			cout << "\tWarning: result was truncated by -maxTrees to " << maxTrees;
+			cout << "\tWarning: result was truncated by -maxTrees to " << params.maxTrees;
 		}
 		cout << endl;
 		
 		sighand_restore();
 		delete algo;
 
-		if (outputZeros && maxScore == 0) 
-		{	if (brief)
+		if (params.outputZeros && maxScore == 0) 
+		{	if (params.brief)
 			{	outfile << '\t' << runtime << "\t0\t0\t0" << endl; //format:time	score	rmsd	trees
-			} else if (MMMLmode)
-			{	MMMdata* theMMMdata = new MMMdata(batchIt->first, batchIt->second, distfileNamesPrefix, 0, ignoreTaxa, refClades, listTaxa);
+			} else if (params.MMMLmode)
+			{	MMMdata* theMMMdata = new MMMdata(batchIt->first, batchIt->second, params.distfileNamesPrefix, 0, ignoreTaxa, refClades, params.listTaxa);
 				if (theMMMdata->bad())
 					cout << "Error constructing MMMdata object for " << batchIt->first << " - " << batchIt->second << endl;
 				else
@@ -531,13 +401,13 @@ int main(int argc, const char* argv[])
 		
 		
 		// Generate the output files:
-		if ((strictSize < 3 && maxScore > 0) || (maxScore == strictSize))
+		if ((params.strictSize < 3 && maxScore > 0) || (maxScore == params.strictSize))
 		{
 			if (maxScore < 3)
 			{
 				//cout << "Warning: maxScore=" << maxScore << "< 3" << flush;
 				cerr << batchIt->first << '\t' << batchIt->second << "\tError: maxScore=" << maxScore << " < 3";
-				handleErrors(ignoreErrors, outfile);
+				handleErrors(params.ignoreErrors, outfile);
 			}
 			
 			const size_t numTrees = resultVec.size();
@@ -548,17 +418,17 @@ int main(int argc, const char* argv[])
 			if (maxScore > matchPotential)
 			{
 				cerr << batchIt->first << '\t' << batchIt->second << "\tError: maxScore=" << maxScore << " > matchPotential=" << matchPotential;
-				handleErrors(ignoreErrors, outfile);
+				handleErrors(params.ignoreErrors, outfile);
 			}
 			//assert(maxScore <= matchPotential);
 			
 			// Output summary
-			if (brief)
+			if (params.brief)
 			{
-				if (!outputZeros)
+				if (!params.outputZeros)
 				{	
 					outfile << batchIt->first << '\t' << batchIt->second << '\t' << taxonCombinations; 
-					if (quickMP) outfile << '\t' << quickMatchPotential;
+					if (params.quickMP) outfile << '\t' << quickMatchPotential;
 					outfile << '\t' << matchPotential;
 				}
 				
@@ -568,9 +438,9 @@ int main(int argc, const char* argv[])
 					rmsd = resultVec.front().second;
 				}
 				outfile << '\t' << runtime << '\t' << maxScore << '\t' << rmsd << '\t' << numTrees << endl;
-				if (!tabDelimitedTable) continue; //nothing more to do in brief mode except when in table mode. Do we actually need table mode at all now?
+				if (!params.tabDelimitedTable) continue; //nothing more to do in brief mode except when in table mode. Do we actually need table mode at all now?
 			}
-			else if (!MMMLmode) // New 2010.02.28: RLC
+			else if (!params.MMMLmode) // New 2010.02.28: RLC
 			{
 				outfile << "infile 1: " << batchIt->first << '\n'; // New 2010.01.23: RLC, to support MMML
 				outfile << "infile 2: " << batchIt->second << '\n'; // New 2010.01.23: RLC, to support MMML
@@ -580,8 +450,8 @@ int main(int argc, const char* argv[])
 
 			// MMML extensions: New 2010.02.28: RLC:
 			MMMdata* theMMMdata = 0;
-			if (MMMLmode) {
-				theMMMdata = new MMMdata(batchIt->first, batchIt->second, distfileNamesPrefix, numTrees, ignoreTaxa, refClades, listTaxa);
+			if (params.MMMLmode) {
+				theMMMdata = new MMMdata(batchIt->first, batchIt->second, params.distfileNamesPrefix, numTrees, ignoreTaxa, refClades, params.listTaxa);
 				if (theMMMdata->bad()) {
 					cout << "Error constructing MMMdata object for " << batchIt->first << " - " << batchIt->second << endl;
 					delete theMMMdata;
@@ -599,35 +469,35 @@ int main(int argc, const char* argv[])
 			{
 				mItEnd = vmIt->first.end();
 				// New 2010.02.28: RLC, modified to feed MMML where desired
-				if (MMMLmode)
+				if (params.MMMLmode)
 				{	set<string> theTaxa1, theTaxa2;
 					for (mIt = vmIt->first.begin(); mIt != mItEnd; ++mIt)
 					{	theTaxa1.insert(names1[mIt->first].substr(2));
 						theTaxa2.insert(names2[mIt->second].substr(2));
 					}
-					theMMMdata->processSubmatricesFromMMM(theTaxa1, theTaxa2, t, (topCoverage ? 0 : &outfile));
+					theMMMdata->processSubmatricesFromMMM(theTaxa1, theTaxa2, t, (params.topCoverage ? 0 : &outfile));
 				} else
 				{	// New 2010.02.28: RLC.
 					double theWtScore = vmIt->second;
-					if (!brief) outfile << "Submatrix " << t << ": weighted score = " << theWtScore << '\n'; // New 2010.01.23: RLC edit
+					if (!params.brief) outfile << "Submatrix " << t << ": weighted score = " << theWtScore << '\n'; // New 2010.01.23: RLC edit
 					for (mIt = vmIt->first.begin(); mIt != mItEnd; ++mIt)
-					{	if (!brief) outfile << names2[mIt->second] << "->" << names1[mIt->first] << '\n';
-						if (t == 1 || !tabulateTop) counts[mIt->first][mIt->second] += 1.0F;
+					{	if (!params.brief) outfile << names2[mIt->second] << "->" << names1[mIt->first] << '\n';
+						if (t == 1 || !params.tabulateTop) counts[mIt->first][mIt->second] += 1.0F;
 					}
 				} // New 2010.02.28: RLC
 			}
 			// MMML extensions: New 2010.02.28: RLC:
-			if (MMMLmode)
+			if (params.MMMLmode)
 			{	theMMMdata->produceSummaryOutput(outfile);
 				delete theMMMdata;
 			}
 			// MMML extensions: New 2010.02.28: RLC.
 
-			if (tabDelimitedTable)
+			if (params.tabDelimitedTable)
 			{
 				if (!tablefile.is_open()) // New 2010.01.23: RLC bug fix: as it was, the file kept getting overwritten
 				{
-					tablefile.open((outfileName + ".tab").c_str());
+					tablefile.open((params.outfileName + ".tab").c_str());
 				}
 				tablefile << numTrees << '\t' << maxScore << "\n----";
 				for (t = 0; t < num1; ++t) 
@@ -635,7 +505,7 @@ int main(int argc, const char* argv[])
 					tablefile << '\t' << names1[t];
 				}
 				
-				const size_t numTreeNorm = tabulateTop ? 1 : numTrees;
+				const size_t numTreeNorm = params.tabulateTop ? 1 : numTrees;
 				for (int u = 0; u < num2; ++u)
 				{
 					tablefile << '\n' << names2[u];
@@ -647,7 +517,7 @@ int main(int argc, const char* argv[])
 		}
 	}
 
-	if (useHardware)
+	if (params.useHardware)
 	{
 		CHardAlgorithm::closeHardware();
 	}
@@ -662,147 +532,7 @@ int main(int argc, const char* argv[])
 
 
 
-static void printUsage1(const string& pname)
-{
-	cout << "Usage 1: " << pname <<
-		" -d1 distfile1 -d2 distfile2 -o outfile -a allowance [-brief] " <<
-		"[-table [-top]] [-u] [-req reqTaxName] [-sz strictSize] [-rangeStart start -rangeEnd end] " <<
-		"[-lower cutoffLower] [-upper cutoffUpper] [-aln2pmb [-gapthresh alignmentGapThreshold] [-printPmb] [-printSlice]] " <<
-		"[-v] [-restore stateFileName]" << endl;
-}
-//
 
-static void printUsage2(const string& pname)
-{
-	cout << "Usage 2: " << pname <<
-		" -b batchfile -o outfile -a allowance [-brief] " <<
-		"[-u] [-req reqTaxName] [-sz strictSize] [-rangeStart start -rangeEnd end] " <<
-		"[-lower cutoffLower] [-upper cutoffUpper] [-aln2pmb [-gapthresh alignmentGapThreshold] [-printPmb] [-printSlice]] " <<
-		"[-v]" << endl;
-}
-//
-
-static void printUsage(const string& pname)
-{
-	printUsage1(pname);
-	cout << "...or..." << endl;
-	printUsage2(pname);
-	cout << "...or..." << endl;
-	cout << "Usage: " << pname << " -help" << endl;
-	cout << "MMML extensions, incompatible with -brief or -z: -Lt rootedTreeFileName [-LtopCov] [-Li ignoreTaxaFileName] " <<
-		"[-Lb minBootstrapSupport] [-List] [-Lv]" << endl;
-	exit(1);
-}
-//
-
-static void printVerboseUsage(const string& pname)
-{
-	cout << endl;
-	printUsage1(pname);
-	cout << "...or..." << endl;
-	printUsage2(pname);
-	cout << "\nRequired parameters:\n" << endl;
-	cout << "-d1 distfile1 (if -b batchfile is not specified)" << endl;
-	cout << "\tSpecifies the file name of the first distance matrix." << endl;
-	cout << "-d2 distfile2 (if -b batchfile is not specified)" << endl;
-	cout << "\tSpecifies the file name of the second distance matrix." << endl;
-	cout << "-b batchfile (if -d1 distfile1 -d2 distfile2 are not specified)" << endl;
-	cout << "\tSpecifies the name of a file containing tab-delimited pairs of distance matrix file names, one pair per line." << endl;
-	cout << "-o outfile" << endl;
-	cout << "\tThe desired name of the output file." << endl;
-	cout << "-a allowance" << endl;
-	cout << "\tSpecifies a value between 0.0 and 1.0, with smaller values requiring more precise matching, and "
-		  << "larger values tolerating looser matching." << endl;
-	cout << "\nOptional parameters:\n" << endl;
-	cout << "-brief" << endl;
-	cout << "\tOutputs a single tab-delimited line of output for the pair of distance matrices." << endl;
-	cout << "-table (valid only when -b batchfile is not specified)" << endl;
-	cout << "\tProduces a tab-delimited matrix that lists the "
-		  << "fit-weighted proportion of matches for each entry from the two distance matrices, "
-		  << "over all common submatrices. For example, if seq1 matched seq2 in two of ten discovered submatrices, with "
-		  << "a score of 0.8 and 0.9, respectively, then the entry for seq1_seq2 would be (0.8 + 0.9) / 10 = 0.17" << endl;
-	cout << "-top (valid only when -table is specified)" << endl;
-	cout << "\tRestricts the -table output to just the best-scoring submatrix." << endl;
-	cout << "-u" << endl;
-	cout << "\tOnly attempts to match entries from the pair of distance matrices that have the same tag in their name. A tag "
-		  << "ends with a pipe (\"|\") character, e.g. Ecoli in Ecoli|DnaA, or Hsapiens in Hsapiens|myc" << endl;
-	cout << "-req reqTaxName" << endl;
-	cout << "\tRequires that a submatrix include at least one entry with the specified reqTaxName, e.g. Hsapiens." << endl;
-	cout << "-sz strictSize" << endl;
-	cout << "\tReturns common submatrices of size strictSize, if any. Does not attempt to find larger submatrices." << endl;
-
-	cout << "-p distfileNamesPrefix" << endl;
-	cout << "\tThe prefix is appended to the path of all distance matrices." << endl;
-	cout << "-z" << endl;
-	cout << "\tForces the output of zeros for combinations that have not reached the minSize (to be used in 'brief' mode)." << endl;
-	cout << "-minsize minSize" << endl;
-	cout << "\tReturns common submatrices of at least minSize, if any. Will not return smaller submatricies. Use this option to save memory with large matrices." << endl;
-	cout << "-maxtrees maxTrees" << endl;
-	cout << "\tLimits the number of returned trees. Saves memory." << endl;
-	cout << "-rangeStart start -rangeEnd end" << endl;
-	cout << "\tFor distributed computing, launch this program multiple times with non-overlapping ranges, [start, end), "
-		  << "start >= 0 and end <= distfile1's matrix size (auto-adjusted when -b is specified). Incompatible with -rndOrder." << endl;
-	cout << "-quickmp" << endl;
-	cout << "\tIf specified, the quickly but naively estimated match potential is included in batch output." << endl;
-	cout << "-v" << endl;
-	cout << "\tOutputs the size of the largest common submatrix found so far, to stdout." << endl;
-	cout << "-onlymp" << endl;
-	cout << "\tDoes not perform MMM analysis, only prints MatchPotential (brief and MMML modes only)." << endl;
-	cout << "-restore stateFileName" << endl;
-	cout << "\tResumes work from a previously interrupted MMM session" << endl;
-	cout << "-exacttime" << endl;
-	cout << "\tDo not round running time to nearest second, in brief mode" << endl;
-	cout << "-upper cutoffUpper" << endl;
-	cout << "\tAll distances above cutoffUpper are set to zero." << endl;
-	cout << "-lower cutoffLower" << endl;
-	cout << "\tAll distances below cutoffLower are set to zero." << endl;
-	cout << "-log" << endl;
-	cout << "\tReplaces the distances with their logs: dst=ln(dst)+1 if dst > 1." << endl;
-	cout << "-noheader" << endl;
-	cout << "\tOmits the header from the output file (brief and MMML modes only)." << endl;
-	cout << "-onlyheader" << endl;
-	cout << "\tPrints the header to the output file and exits (brief and MMML modes only)." << endl;
-	cout << "-ignoreerrors" << endl;
-	cout << "\tDoes not abort the run even in the case of program errors (intended for debugging only)." << endl;
-	
-	cout << "MMML extensions:" << endl;
-	cout << "\t-Lt rootedTreeFileName (required)" << endl;
-	cout << "\t\tFile name for a Newick style tree file encompassing all of the taxa to be encountered in the MMM run." << endl;
-	cout << "\t-LtopCov (optional)" << endl;
-	cout << "\t\ttop-coverage style output." << endl;
-	cout << "\t-Li ignoreTaxaFileName (optional)" << endl;
-	cout << "\t\tfile listing taxon names to ignore in the MMML analysis." << endl;
-	cout << "\t-Lb minBootstrapSupport (optional, default=1)" << endl;
-	cout << "\t\tan integer between 0 and 100 representing the threshold below which to collapse branches in parsing the treefile." << endl;
-	cout << "\t-List (optional)" << endl;
-	cout << "\t\tif specified, lists the taxa in each clade in the output." << endl;
-	cout << "\t-Lv (optional)" << endl;
-	cout << "\t\tif specified, outputs the clade sets." << endl;
-	
-	cout << "Alignment processing mode:" << endl;
-	cout << "\tPermits the recognition of .aln files as FASTA alignments and processing them into PMB matrices." << endl;
-	cout << "\tWhen enabled, simply specify a .aln filename in place of distance matrix file. This works in both command-line and batch modes." << endl;
-	cout << "\tA named alignment slice can be defined as comma-separated ranges of columns added after the filename." << endl;
-	cout << "\tWhen using multiple ranges to define a slice, the ranges must go in increasing order, and must not overlap." << endl;
-	cout << "\tAn \"inverse\"slice (remove the slice itself and keep all other columns) can be specified by adding 'r' after the range. Do not use with multiple ranges." << endl;
-	cout << "\tFormat: <filename>|[range name]:<start>-<end>[r][,<start>-<end> ...]" << endl;
-	cout << "\tExamples:" << endl;
-	cout << "\t\talignment1.aln" << endl;
-	cout << "\t\talignment2.aln|pfam12820:373-546" << endl;
-	cout << "\t\talignment3.aln|disorder:16-90,150-150,430-519" << endl;
-	cout << "\t\talignment4.aln|:300-400r" << endl;
-	cout << "\t-aln2pmb"  << endl;
-	cout << "\t\tEnables alignment processing mode. Required for the recognition of following options:" << endl;
-	cout << "\t-gapthresh alignmentGapThreshold" << endl;
-	cout << "\t\tDefines the fraction of gaps (symbols - or X) beyond which sequences will be excluded from alignments (and slices)" << endl;
-	cout << "\t-printpmb" << endl;
-	cout << "\t\toutputs generated distance matrix files as name.pmbq" << endl;
-	cout << "\t-printslice" << endl;
-	cout << "\t\toutputs generated alignement slice files as name.aln" << endl;
-	
-	exit(1);
-}
-//
 
 //abezgino
 //rearrange the matrices to ensure that the sequences for the reqTax are placed at the top
@@ -990,10 +720,14 @@ static void handleErrors(bool ignoreErrors, filtering_stream<output>& outfile)
 }
 //
 
-static unsigned int getDistMatrix(const string& which, const string& distFilenamePrefix, const string& distFilename,
+static unsigned int getDistMatrix(const string& which, const string& distFilename,
 									  list <DistanceMatrix>& distMatricesCache, list <Alignment>& alignmnentsCache,
 									  vector <double>& distances, vector <string>& names, vector <string>& taxLabels,
-									  bool useTaxInfo, bool aln2pmb, bool printPmb, bool printSlice, double gapThreshold)
+									  
+									  bool useTaxInfo, Parameters params
+									  //bool aln2pmb, bool printPmb, bool printSlice, double gapThreshold
+									  
+									  )
 {
 	//parameters
 	bool quickPmb=true;// printPmb=false, printSlice=false; 
@@ -1002,7 +736,7 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 	if(!find_in_dist_matrices_cache(distMatricesCache, distFilename))
 	{
 		#ifdef VERBOSE
-		cout << "\nWarning: matrix [" << distFilename << "] is not cached. Trying to read from file. Cache size=" << distMatricesCache.size() << '/' << DISTANCE_MATRIX_CACHE_SIZE << endl;
+		cout << "\nWarning: matrix [" << distFilename << "] is not cached. Trying to read from file. Cache size=" << distMatricesCache.size() << '/' << params.distanceMarixCacheSizeLimit << " (usage=" << ceil(getCurrentRSS() / 1024 / 1024) << " MB)" << endl;
 		#endif
 		distMatricesCache.push_front(DistanceMatrix(distFilename));
 		DistanceMatrix& distanceMatrixTmp = distMatricesCache.front();
@@ -1017,25 +751,25 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 		
 		string extension = filename.substr(filename.find_last_of('.')+1);
 		
-		if (aln2pmb && extension == "aln")
+		if (params.aln2pmb && extension == "aln")
 		{
 			#ifdef VERBOSE
 			cout << "\tWarning: extension [" << extension <<"] found. Calculating PMB distnce matrix from alignment ..." << endl;
 			#endif
 			
-			Alignment const& alignment = getAlignment(distFilenamePrefix, filename, alignmnentsCache, gapThreshold);
+			Alignment const& alignment = getAlignment(filename, alignmnentsCache, params);
 			#ifdef VERBOSE
 			cout << "Alignment length: " << alignment.get_nOfColumns() << endl;
 			//cout << alignment.get_sequence(1) << endl;
 			#endif
 			if(subAln)
-			{	Alignment alignmentSlice = getSlice(distFilenameSS, alignment, gapThreshold);
+			{	Alignment alignmentSlice = getSlice(distFilenameSS, alignment, params.gapThreshold);
 				#ifdef VERBOSE
 				cout << "Slice length: " << alignmentSlice.get_nOfColumns() << endl;
 				//cout << alignmentSlice.get_sequence(1) << endl;
 				#endif
-				if(printSlice)
-				{	string filepath = distFilenamePrefix+distFilename+".slice";
+				if(params.printSlice)
+				{	string filepath = params.distfileNamesPrefix+distFilename+".slice";
 					ifstream file(filepath.c_str()); 
 					if (!file)
 						try
@@ -1053,8 +787,8 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 			{	distanceMatrixTmp.create_from_alignment(alignment, quickPmb);
 			}
 			
-			if (printPmb)
-			{	string filepath = distFilenamePrefix+distFilename+".pmbq";
+			if (params.printPmb)
+			{	string filepath = params.distfileNamesPrefix+distFilename+".pmbq";
 				ifstream file(filepath.c_str()); 
 				if (!file)
 					try
@@ -1073,10 +807,10 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 			if(extension == "aln")
 				cout << "\tWarning: extension [" << extension <<"] found. Forgot to add -aln2pmb option?" << endl;
 			#endif
-			distanceMatrixTmp.read_from_file(distFilenamePrefix+distFilename);
+			distanceMatrixTmp.read_from_file(params.distfileNamesPrefix+distFilename);
 		}
 		
-		if(distMatricesCache.size() > DISTANCE_MATRIX_CACHE_SIZE)
+		while(distMatricesCache.size() > params.distanceMarixCacheSizeLimit || ceil(getCurrentRSS() / 1024 / 1024) > params.memoryUsageLimitMegabytes)
 		{	
 			#ifdef VERBOSE
 			cout << "\tWarning: cache has too many elements. Removing the last one [" << distMatricesCache.back().get_name() << "]" << endl;
@@ -1107,22 +841,22 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 }
 //
 
-static Alignment const& getAlignment(const string& inFilepathPrefix, const string& inFilename, list <Alignment>& alignmnentsCache, double gapThreshold)
+static Alignment const& getAlignment(const string& inFilename, list <Alignment>& alignmnentsCache, Parameters params)
 {	
 	//if(! Alignment::find_in_cache(alignmnentsCache, inFilename))
 	if(!find_in_alignments_cache(alignmnentsCache, inFilename))
 	{
 		#ifdef VERBOSE
-		cout << "\tWarning: alignment [" << inFilename << "] not cached. Trying to read from file. Cache size=" << alignmnentsCache.size() << '/' << ALIGNMENT_CACHE_SIZE << endl;
+		cout << "\tWarning: alignment [" << inFilename << "] not cached. Trying to read from file. Cache size=" << alignmnentsCache.size() << '/' << params.alnCacheSizeLimit << endl;
 		#endif
 		alignmnentsCache.push_front(Alignment(inFilename));
 		//cout << "name=[" << alignmnentsCache.front().get_name() << "]" << endl;
 		//if (alignmnentsCache.front().get_name().empty())
 		//	cout << "empty name\n"; 
 		//alignmnentsCache.front().set_name(inFilename);
-		alignmnentsCache.front().read_alignment(inFilepathPrefix+inFilename, gapThreshold); //even if this fails, the alignment name is already cached, so the file won't be attempted to get re-read several times over.
+		alignmnentsCache.front().read_alignment(params.distfileNamesPrefix+inFilename, params.gapThreshold); //even if this fails, the alignment name is already cached, so the file won't be attempted to get re-read several times over.
 
-		if(alignmnentsCache.size() > ALIGNMENT_CACHE_SIZE)
+		if(alignmnentsCache.size() > 2 && alignmnentsCache.size() > params.alnCacheSizeLimit)
 		{
 			#ifdef VERBOSE
 			cout << "\tWarning: cache has too many elements. Removing the last one [" << alignmnentsCache.back().get_name() << "]" << endl;
@@ -1193,7 +927,7 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 		distFilenameSS >> end;
 
 		#ifdef VERBOSE
-		cout << " [" << start <<"]-[" << end << "]";
+		cout << "[" << start <<"]-[" << end << "]; ";
 		#endif
 		
 		if(!distFilenameSS.eof() && distFilenameSS.peek() == 'r') //"reverse-slice" mode, where only the slice itself is removed
