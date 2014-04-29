@@ -10,10 +10,7 @@
 using namespace std;
 
 struct Parameters
-{
-
-
-	string distfileName1, distfileName2, batchFileName, outfileName, distfileNamesPrefix, stateFileName;
+{	string distfileName1, distfileName2, batchFileName, outfileName, distfileNamesPrefix, stateFileName;
 	string reqTaxName;
 	int strictSize;
 	int minSize;

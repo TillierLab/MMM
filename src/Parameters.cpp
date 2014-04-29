@@ -7,7 +7,7 @@ Parameters::Parameters()
 
 	strictSize = -1;
 	minSize = 0;
-	 maxTrees = numeric_limits<int>::max();
+	maxTrees = numeric_limits<int>::max();
 	rangeStart = -1, rangeEnd = numeric_limits<int>::max();
 	
 	tabulateTop = false;
@@ -187,9 +187,15 @@ void Parameters::printVerboseUsage(const string& pname)
 	cout << "\t-gapthresh alignmentGapThreshold" << endl;
 	cout << "\t\tDefines the fraction of gaps (symbols - or X) beyond which sequences will be excluded from alignments (and slices)" << endl;
 	cout << "\t-printpmb" << endl;
-	cout << "\t\toutputs generated distance matrix files as name.pmbq" << endl;
+	cout << "\t\toutputs generated distance matrix files as 'name.pmbq'" << endl;
 	cout << "\t-printslice" << endl;
-	cout << "\t\toutputs generated alignement slice files as name.aln" << endl;
+	cout << "\t\toutputs generated alignement slice files as 'name.aln'" << endl;
+	
+	cout << "The batch input file is compressed with gzip" << endl;
+	cout << "\t-gzipin " << endl;
+	cout << "The output file is compressed with gzip" << endl;
+	cout << "\t-gzipout " << endl;
+	
 	
 	exit(1);
 }
@@ -214,12 +220,10 @@ void Parameters::process(int argc, const char* argv[])
 			printUsage(options.programName());
 		}
 	}
-
 	if (haveBatch && stateRestore)
 	{
 		printUsage(options.programName());
 	}
-
 	brief = options.parse("-brief"); // optional; edit New 2010.03.01: RLC, fixed by abezginov
 	tabDelimitedTable = (batchFileName.empty() && options.parse("-table")); // optional, precluded if -b is selected
 	if (!batchFileName.empty() && !distfileName1.empty()) printUsage(options.programName());
@@ -249,7 +253,6 @@ void Parameters::process(int argc, const char* argv[])
 	logDistances = options.parse("-log"); 
 	ignoreErrors = options.parse("-ignoreerrors");
 	
-	
 	reqTax = !reqTaxName.empty();
 	if (reqTax && !useTaxInfo)
 	{	cout << "\nError: Must use taxon info when requiring a taxon." << endl;
@@ -258,7 +261,6 @@ void Parameters::process(int argc, const char* argv[])
 	
 	if (reqTax)
 		cout << "Warning: -req option is currently broken (may return lower scores than it should). Use with caution." << endl;
-		
 		
 	// MMML extensions: New 2010.02.28: RLC:
 	options.parse("-Lt", &treeFileName); // optional
@@ -273,14 +275,12 @@ void Parameters::process(int argc, const char* argv[])
 		LverboseMode = options.parse("-Lv"); // optional
 	}
 	// New 2010.02.28: RLC.
-		
 	// abezgino 2011.01.21
 	if (brief)
 	{	quickMP = options.parse("-quickmp");
 		onlyMP = options.parse("-onlymp");
 		if (onlyMP) outputZeros = true;
 	}
-	
 	
 	if (brief || MMMLmode)
 	{	noHeader = options.parse("-noheader"); 
@@ -290,7 +290,6 @@ void Parameters::process(int argc, const char* argv[])
 			printUsage(options.programName());
 		}
 	}
-	
 	
 	const int foundRangeStart = options.parse("-rangeStart", &rangeStart); // optional
 	const int foundRangeEnd = options.parse("-rangeEnd", &rangeEnd); // optional
@@ -302,24 +301,23 @@ void Parameters::process(int argc, const char* argv[])
 		printPmb = options.parse("-printpmb");
 		printSlice = options.parse("-printslice");
 		
-		options.parse("-alnCacheSize", alnCacheSizeLimit);
+		options.parse("-alnCacheSize", &alnCacheSizeLimit);
 		if (alnCacheSizeLimit < 2)
 		{	cout << "Alignment cache size must be at least 2" << endl;
 			printUsage(options.programName());
 		}
 		
-		options.parse("-matrixCacheSize", distanceMarixCacheSizeLimit);
+		options.parse("-matrixCacheSize", &distanceMarixCacheSizeLimit);
 		if (distanceMarixCacheSizeLimit < 2)
 		{	cout << "Matrix cache size must be at least 2" << endl;
 			printUsage(options.programName());
 		}
 		
 	}
-	
 	gzipIn = options.parse("-gzipin"); 
 	gzipOut = options.parse("-gzipout"); 
 	
-	options.parse("-memoryUsageLimit", memoryUsageLimitMegabytes);
+	options.parse("-memoryUsageLimit", &memoryUsageLimitMegabytes);
 	
 	
 	if (!options.empty())
@@ -328,6 +326,7 @@ void Parameters::process(int argc, const char* argv[])
 		cout << endl;
 		printUsage(options.programName());
 	}
+	
 }
 //
 	

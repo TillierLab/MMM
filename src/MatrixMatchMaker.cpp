@@ -4,24 +4,28 @@
 
 // Do not distribute
 
-#include "classCmdLineArgParser.h"
-#include <algorithm>
-#include <cassert>
-#include <cmath>
-#include <fstream>
+
+#include <cstdlib>
 #include <iostream>
-#include <limits>
+#include <vector>
+#include <list>
 #include <map>
 #include <set>
+#include <cmath>
+
+#include <algorithm>
 #include <sstream>
-#include <string>
-#include <vector>
-#include <cstdlib>
-#include <ctime>
+
+//#include <fstream>
+//#include <iostream>
+//#include <cstdlib>
+//#include <ctime>
 
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
+
+#include "Parameters.hpp"
 
 #include "mmm_algorithm.h"
 #include "timer.h"
@@ -30,8 +34,6 @@
 
 #include "Alignment.hpp"
 #include "DistanceMatrix.hpp"
-
-#include "Parameters.hpp"
 
 #include "getRSS.h"
 
@@ -76,14 +78,11 @@ static Alignment getSlice(stringstream& distFilenameSS, Alignment const& alignme
 
 int main(int argc, const char* argv[])
 {
-
-
-	cout << "Started" << endl;
 	// Read arguments from the command line:
 	Parameters params;
 	params.process(argc, argv);
 	
-	cout << "params done" << endl;
+
 	
 	//populate the list of pairs of distance matrices to run
 	vector<pair<string, string> > theDistFileNames;
@@ -219,18 +218,13 @@ int main(int argc, const char* argv[])
 
 			//reqTax=false; //debug - check whether simply rearranging the matrices affects the results
 		}
-		#ifdef VERBOSE
-		cout << "reqTax done" << endl;
-		#endif
+		
 		// Assign unique integers to taxon labels
 		vector<int> taxIndices1, taxIndices2;
 		int reqTaxIndex;
 		processTaxonLabels(taxLabels1, params.reqTaxName, taxIndices1, taxLabels, reqTaxIndex);
 		processTaxonLabels(taxLabels2, params.reqTaxName, taxIndices2, taxLabels, reqTaxIndex);
 		
-		#ifdef VERBOSE
-		cout << "processTaxonLabels done" << endl;
-		#endif
 		
 		// showstats: just show information about matrices and do nothing
 		if (params.doShowStats)
@@ -241,9 +235,7 @@ int main(int argc, const char* argv[])
 		processDistances(distances1, params.cutoffLower, params.cutoffUpper, params.logDistances);
 		processDistances(distances2, params.cutoffLower, params.cutoffUpper, params.logDistances);
 
-		#ifdef VERBOSE
-		cout << "processDistances done" << endl;
-		#endif
+		
 		
 		// Initialize the algorithm
 		CMMMAlgorithm* algo = NULL;
@@ -262,28 +254,16 @@ int main(int argc, const char* argv[])
 			continue;
 		}
 		
-		#ifdef VERBOSE
-		cout << "algo done" << endl;
-		#endif
 		
 		// Calculate match potential and taxon combinations
 		int taxonCombinations = calcTaxonCombinations(taxIndices1, taxIndices2);
 		
-		#ifdef VERBOSE
-		cout << "calcTaxonCombinations done" << endl;
-		#endif
 		
 		//abezgino 2011.01.21: calculate both match potentials (should not add too much overhead)
 		int quickMatchPotential = findBiggestPossibleMatch(taxLabels1, taxLabels2, params.useTaxInfo);
 		
-		#ifdef VERBOSE
-		cout << "findBiggestPossibleMatch done" << endl;
-		#endif
 		
 		int matchPotential = algo->calcMatchPotential();
-		#ifdef VERBOSE
-		cout << "calcMatchPotential done" << endl;
-		#endif
 		
 		//abezgino 2011.01.21
 		//debug code to ensure that new matchPotential is never larger than quickMatchPotential
@@ -809,11 +789,11 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 			#endif
 			distanceMatrixTmp.read_from_file(params.distfileNamesPrefix+distFilename);
 		}
-		
-		while(distMatricesCache.size() > params.distanceMarixCacheSizeLimit || ceil(getCurrentRSS() / 1024 / 1024) > params.memoryUsageLimitMegabytes)
+		//while loop doesn't work, because the size doesn't go down
+		if(distMatricesCache.size() > params.distanceMarixCacheSizeLimit || ceil(getCurrentRSS() / 1024 / 1024) > params.memoryUsageLimitMegabytes)
 		{	
 			#ifdef VERBOSE
-			cout << "\tWarning: cache has too many elements. Removing the last one [" << distMatricesCache.back().get_name() << "]" << endl;
+			cout << "\tWarning: distance matrix cache has too many elements. Cache size=" << distMatricesCache.size() << '/' << params.distanceMarixCacheSizeLimit << " (usage=" << ceil(getCurrentRSS() / 1024 / 1024) << " MB) Removing the last one [" << distMatricesCache.back().get_name() << "]" << endl;
 			#endif
 			distMatricesCache.pop_back();
 		}
@@ -859,7 +839,7 @@ static Alignment const& getAlignment(const string& inFilename, list <Alignment>&
 		if(alignmnentsCache.size() > 2 && alignmnentsCache.size() > params.alnCacheSizeLimit)
 		{
 			#ifdef VERBOSE
-			cout << "\tWarning: cache has too many elements. Removing the last one [" << alignmnentsCache.back().get_name() << "]" << endl;
+			cout << "\tWarning: alignment cache has too many elements. Removing the last one [" << alignmnentsCache.back().get_name() << "]" << endl;
 			#endif
 			alignmnentsCache.pop_back();
 		}
