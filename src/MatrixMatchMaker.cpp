@@ -790,7 +790,7 @@ static unsigned int getDistMatrix(const string& which, const string& distFilenam
 			distanceMatrixTmp.read_from_file(params.distfileNamesPrefix+distFilename);
 		}
 		//while loop doesn't work, because the size doesn't go down
-		if(distMatricesCache.size() > params.distanceMarixCacheSizeLimit || ceil(getCurrentRSS() / 1024 / 1024) > params.memoryUsageLimitMegabytes)
+		if(distMatricesCache.size() > 2 && (distMatricesCache.size() > params.distanceMarixCacheSizeLimit || ceil(getCurrentRSS() / 1024 / 1024) > params.memoryUsageLimitMegabytes))
 		{	
 			#ifdef VERBOSE
 			cout << "\tWarning: distance matrix cache has too many elements. Cache size=" << distMatricesCache.size() << '/' << params.distanceMarixCacheSizeLimit << " (usage=" << ceil(getCurrentRSS() / 1024 / 1024) << " MB) Removing the last one [" << distMatricesCache.back().get_name() << "]" << endl;
