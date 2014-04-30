@@ -1,3 +1,6 @@
+MMMvII
+===
+```
 MatrixMatchMaker version 2. Elisabeth Tillier, Robert L. Charleblois,
 Alexander Rodionov, Alexandr Bezginov, Jonathan Rose. University of Toronto
 and University Health Network.
@@ -122,3 +125,4 @@ The batch input file is compressed with gzip
 	-gzipin 
 The output file is compressed with gzip
 	-gzipout 
+```
