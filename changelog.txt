@@ -1,3 +1,6 @@
+outdated: all subsequent changes are intended to be stored in the git log
+
+
 todo:
 	put command-line options in a struct for easier management
 	parse options in a separate function
